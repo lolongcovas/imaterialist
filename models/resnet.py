@@ -6,7 +6,7 @@ __all__ = ['ResNet101', 'ResNet152']
 
 class ResNet(nn.Module):
 
-    def __init__(self, resnet_version='resnet50', num_classes=10):
+    def __init__(self, resnet_version='resnet50', nClasses=10):
         super(ResNet, self).__init__()
         from torchvision.models.resnet import resnet18, \
             resnet34, resnet50, resnet101, resnet152
@@ -29,7 +29,7 @@ class ResNet(nn.Module):
         self.layer3 = resnet.layer3
         self.layer4 = resnet.layer4
         self.avgpool = nn.AvgPool2d(7)
-        self.classifier = nn.Linear(512 * 4, 1000)
+        self.classifier = nn.Linear(512 * 4, nClasses)
 
     def forward(self, x):
         x = self.conv1(x)

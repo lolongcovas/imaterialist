@@ -13,6 +13,9 @@ import tensorboard_logger as tflogger
 
 NUM_WORKERS = 8
 
+if 'NUM_WORKERS' in os.environ:
+    NUM_WORKERS = int(os.environ['NUM_WORKERS'])
+
 
 def parse_json(filename):
     data = json.load(open(filename))
@@ -21,7 +24,7 @@ def parse_json(filename):
                        .replace('http://', '') for x in data['images']]
     imageId2labels = {x['imageId']: map(int, x['labelId'])
                       for x in data['annotations']}
-    image_labels = [np.array(imageId2labels[int(x['imageId'])])-1
+    image_labels = [np.array(imageId2labels[x['imageId']])-1
                     for x in data['images']]
     
     return image_filenames, image_labels
@@ -40,11 +43,18 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument('-epochs', help='total epochs. default 20',
                         type=int, default=20)
+    parser.add_argument('-resume', help='epoch to resume from',
+                        type=int, default=0)
     parser.add_argument('-lr', help='learning rate. default 0.1',
                         type=float, default=0.1)
     parser.add_argument('-bsize', help='batch size',
                         type=int, default=128)
     parser.add_argument('-log', help='log path',
+                        type=str)
+    parser.add_argument('-bpath', help='image path',
+                        type=str,
+                        default='/media/nas/private-dataset/imaterialist')
+    parser.add_argument('-out', help='output model filename',
                         type=str)
 
     args = parser.parse_args()
@@ -60,7 +70,7 @@ if __name__ == '__main__':
     train_filenames, train_labels = parse_json('jsons/train.json')
     val_filenames, val_labels = parse_json('jsons/validation.json')
     train_dataset = dataset(args.bpath,
-                            train_filenames, train_labels)
+                            train_filenames, train_labels, validation=True)
     val_dataset = dataset(args.bpath,
                           val_filenames, val_labels,
                           validation=True)
@@ -87,7 +97,7 @@ if __name__ == '__main__':
     model = nn.DataParallel(model)
 
     # setup criterion
-    criterion = nn.BCEWithLogitsLoss.cuda()
+    criterion = nn.BCEWithLogitsLoss().cuda()
 
     lr = args.lr
     momentum = 0.99
@@ -127,9 +137,11 @@ if __name__ == '__main__':
         std = 0
         for i, (X, y) in enumerate(train_dataloader):
             X = torch.autograd.Variable(X.cuda())
-            # mean += X.transpose(1, 0).contiguous().view(3, -1).mean(1)
-            # std += X.transpose(1, 0).contiguous().view(3, -1).std(1)
-
+            """
+            mean += X.transpose(1, 0).contiguous().view(3, -1).mean(1)
+            std += X.transpose(1, 0).contiguous().view(3, -1).std(1)
+            continue
+            """
             y = torch.autograd.Variable(y.cuda())
             y_pred = model(X)
             optimizer.zero_grad()

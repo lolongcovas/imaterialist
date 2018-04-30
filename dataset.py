@@ -13,7 +13,8 @@ class dataset(torch.utils.data.Dataset):
     def __init__(self, bpath, im_filenames, im_labels,
                  input_size=224, validation=False):
         self.bpath = bpath
-        self.gt = json.load(json_filename)
+        self.im_filenames = im_filenames
+        self.im_labels = im_labels
         self.input_size = input_size
         self.validation = validation
         
@@ -37,28 +38,41 @@ class dataset(torch.utils.data.Dataset):
         ])
 
     def __getitem__(self, index):
-        im = cv2.imread(os.path.join(self.bpath, self.filenames[index]), 1)
+        im = cv2.imread(os.path.join(self.bpath,
+                                     self.im_filenames[index]), 1)
+        if im is None:
+            fs = os.path.join(self.bpath, self.im_filenames[index])
+            os.system('echo %s >> failed_images' % fs)
+            im = np.zeros([300, 300, 3], dtype=np.uint8)
         if not self.validation:
             im = self.seq.augment_image(im)
         rows, cols = im.shape[:2]
-
-        im = im[(rows-self.input_size)//2:
-                (rows-self.input_size)//2+self.input_size,
-                (cols-self.input_size)//2:
-                (cols-self.input_size)//2+self.input_size, :]
+        if rows < self.input_size\
+           or cols < self.input_size:
+            im = cv2.resize(im, (self.input_size, self.input_size))
+        else:
+            im = im[(rows-self.input_size)//2:
+                    (rows-self.input_size)//2+self.input_size,
+                    (cols-self.input_size)//2:
+                    (cols-self.input_size)//2+self.input_size, :]
         # BGR 2 RGB
         im = im[:, :, ::-1].copy()
-
+        # print im.shape
         # im = preprocessing.contrast_enhanced(im)
 
         # mean = [0.3940, 0.2713, 0.1869], RGB
         # std = [0.2777, 0.1981, 0.1574]
+        # mean and std, of imaterialist, are
+        # 0.5883, 0.5338, 0.5273 and
+        # 0.3363, 0.3329, 0.3268
         im = ToTensor()(im)
         for t, m, s in zip(im,
-                           [0.3940, 0.2713, 0.1869],
-                           [0.2777, 0.1981, 0.1574]):
+                           [0.5883, 0.5338, 0.5273],
+                           [0.3363, 0.3329, 0.3268]):
             t.sub_(m).div_(s)
-        return im, self.labels[index]
+        label = np.zeros([1, 228], dtype=np.int32)
+        label[0, self.im_labels[index]] = 1
+        return im, label
 
     def __len__(self):
-        return len(self.filenames)
+        return len(self.im_filenames)
