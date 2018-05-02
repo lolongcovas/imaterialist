@@ -41,9 +41,13 @@ class dataset(torch.utils.data.Dataset):
         im = cv2.imread(os.path.join(self.bpath,
                                      self.im_filenames[index]), 1)
         if im is None:
-            fs = os.path.join(self.bpath, self.im_filenames[index])
-            os.system('echo %s >> failed_images' % fs)
-            im = np.zeros([300, 300, 3], dtype=np.uint8)
+            im = cv2.imread(os.path.join(self.bpath,
+                                         self.im_filenames[index])+'.jpg',
+                            1)
+            if im is None:
+                fs = os.path.join(self.bpath, self.im_filenames[index])
+                os.system('echo %s >> failed_images' % fs)
+                im = np.zeros([300, 300, 3], dtype=np.uint8)
         if not self.validation:
             im = self.seq.augment_image(im)
         rows, cols = im.shape[:2]
@@ -51,10 +55,19 @@ class dataset(torch.utils.data.Dataset):
            or cols < self.input_size:
             im = cv2.resize(im, (self.input_size, self.input_size))
         else:
-            im = im[(rows-self.input_size)//2:
-                    (rows-self.input_size)//2+self.input_size,
-                    (cols-self.input_size)//2:
-                    (cols-self.input_size)//2+self.input_size, :]
+            # random crop
+            try:
+                off_x = np.random.randint(0, max(1, (cols-self.input_size)//2))
+                off_y = np.random.randint(0, max(1, (rows-self.input_size)//2))
+                random_w = np.random.randint(self.input_size, max(self.input_size+1,
+                                                                  cols - off_x))
+                random_h = np.random.randint(self.input_size, max(self.input_size+1,
+                                                                  rows - off_y))
+            except:
+                import epdb; epdb.set_trace()
+            im = im[off_y: off_y+random_h,
+                    off_x: off_x+random_w, :]
+            im = cv2.resize(im, (self.input_size, self.input_size))
         # BGR 2 RGB
         im = im[:, :, ::-1].copy()
         # print im.shape
@@ -70,8 +83,8 @@ class dataset(torch.utils.data.Dataset):
                            [0.5883, 0.5338, 0.5273],
                            [0.3363, 0.3329, 0.3268]):
             t.sub_(m).div_(s)
-        label = np.zeros([1, 228], dtype=np.int32)
-        label[0, self.im_labels[index]] = 1
+        label = np.zeros([228], dtype=np.float32)
+        label[self.im_labels[index]] = 1
         return im, label
 
     def __len__(self):
