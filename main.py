@@ -10,6 +10,7 @@ import json
 from dataset import dataset
 import torch
 import torch.nn as nn
+from torch.utils.data.sampler import WeightedRandomSampler
 import tensorboard_logger as tflogger
 
 
@@ -98,10 +99,12 @@ if __name__ == '__main__':
     label_weights = np.histogram(labels, bins=228)[0].astype(np.float32)
     label_weights = np.sum(label_weights) / label_weights
     label_weights = label_weights / np.max(label_weights)
+    samples_weight = [np.mean(label_weights[label]) for label in train_labels]
 
     val_filenames, val_labels = parse_json('jsons/validation.json.gz')
     train_dataset = dataset(args.bpath,
-                            train_filenames, train_labels, validation=True)
+                            train_filenames, train_labels,
+                            validation=False)
     val_dataset = dataset(args.bpath,
                           val_filenames, val_labels,
                           validation=True)
@@ -109,9 +112,11 @@ if __name__ == '__main__':
     batch_size = args.bsize
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=batch_size,
-                                  shuffle=True,
+                                  shuffle=False,
                                   num_workers=NUM_WORKERS,
-                                  pin_memory=True)
+                                  pin_memory=True,
+                                  sampler=WeightedRandomSampler(samples_weight,
+                                                                len(samples_weight)))
     val_dataloader = DataLoader(val_dataset,
                                 batch_size=batch_size,
                                 shuffle=False,
@@ -121,13 +126,14 @@ if __name__ == '__main__':
     model = models.__dict__[args.net](nClasses=228)
     # model.set_fine_tune_level(args.ft, args.seed)
     model = model.cuda()
-    model = nn.DataParallel(model)
+    # model = nn.DataParallel(model)
     if args.weights:
         weights = torch.load(args.weights)['state_dict']
         model.load_state_dict(weights)
         # model.load_model(weights)
     torch.backends.cudnn.benchmark = True
 
+    model.set_fine_tune_level(level=3)
 
     # setup criterion
     criterion = nn.BCEWithLogitsLoss(weight=torch.from_numpy(label_weights))\
@@ -149,7 +155,6 @@ if __name__ == '__main__':
     # sample_ratio = 0.975
     # label_hist = np.histogram(labels, bins=5)[0]
     # label_hist = 1 / (label_hist.astype(np.float32) / np.sum(label_hist))
-
     for epoch in range(args.resume, args.epochs):
         scheduler.step()
         # alpha = sample_ratio ** epoch
